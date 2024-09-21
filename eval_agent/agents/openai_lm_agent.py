@@ -6,7 +6,6 @@ from .base import LMAgent
 
 logger = logging.getLogger("agent_frame")
 
-
 class OpenAILMAgent(LMAgent):
     def __init__(self, config):
         super().__init__(config)
@@ -16,6 +15,9 @@ class OpenAILMAgent(LMAgent):
         if "api_key" in config:
             openai.api_key = config['api_key']
 
+        # openai.api_key = 'sk-UTsTKP7fGYJI2HT22e4899C0A92a4b01Bd182a9021F7C5B3' # gpt3.5
+        openai.api_key = 'sk-wWuauIF02aZbs8tnFaF448D518Ac43149d09287147534e6a' # gpt4
+        openai.api_base = "https://api.huiyan-ai.cn/v1"
     @backoff.on_exception(
         backoff.fibo,
         # https://platform.openai.com/docs/guides/error-codes/python-library-error-types

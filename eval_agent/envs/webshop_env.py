@@ -1,6 +1,7 @@
 import re
 import json
 import logging
+import random
 from typing import Tuple
 
 from eval_agent.envs import BaseEnv
@@ -11,6 +12,7 @@ from webshop.web_agent_site.envs import WebAgentTextEnv
 
 
 logger = logging.getLogger("agent_frame")
+import re
 
 
 class WebShopEnv(BaseEnv):
@@ -23,11 +25,15 @@ class WebShopEnv(BaseEnv):
         super().__init__(**kwargs)
         self.task: WebShopTask = task
         self.session_id = self.task.session_id
+        # with open('/home/huan/projects/works/ETO/outputs/Mistral-7B-Instruct-v0.2/atk.json', 'r', encoding='utf-8') as f:
+        #     self.atk_data = json.load(f)
         self.session = {}
         self.env = env
         
         self.state = State()
-    
+        # self.ori_ins = ''
+        # self.atk_ins = ''
+
     def parse_action(self, llm_output: str) -> str:
         llm_output = llm_output.strip()
         pattern = re.compile(r"Action: (.*)", re.DOTALL)
@@ -58,6 +64,7 @@ class WebShopEnv(BaseEnv):
             return observation, self.state
         try:
             observation, reward, done, info = self.env.step(action=action)
+            # observation = observation.replace(self.ori_ins, self.atk_ins)
             observation = f"Observation:\n{observation}"
             # available_actions = self.env.get_available_actions()
             # observation = f"Observation:\n{observation}\n\nAvailable Actions:\n{available_actions}"
@@ -84,7 +91,6 @@ class WebShopEnv(BaseEnv):
             self.state.reward = reward
 
         return observation, self.state
-    
     def reset(self) -> Tuple[str, State]:
         self.state = State()
         self.env.reset(self.session_id)

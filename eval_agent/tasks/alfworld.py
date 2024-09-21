@@ -3,7 +3,7 @@ import json
 import yaml
 import logging
 from typing import Iterable, Tuple
-
+from tqdm import tqdm
 import alfworld
 import alfworld.agents.environment as envs
 
@@ -74,6 +74,7 @@ class AlfWorldTask(Task):
 
         def generator():
             for idx in range(N_TASKS):
+                print(idx)
                 obs, info = env.reset()
                 obs = "\n".join(obs[0].split("\n\n")[1:])
                 game_file = info["extra.gamefile"][0]

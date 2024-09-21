@@ -166,3 +166,4 @@ envs/webshop/search_index/
 /data/
 test.sh
 eval_agent/data/alfworld/json_2.1.1/
+/outputs/

@@ -265,7 +265,11 @@ class WebAgentTextEnv(gym.Env):
 
     def close(self):
         pass
-    
+
+    @observation.setter
+    def observation(self, value):
+        self._observation = value
+
 
 def tag_visible(element):
     ignore = {'style', 'script', 'head', 'title', 'meta', '[document]'}

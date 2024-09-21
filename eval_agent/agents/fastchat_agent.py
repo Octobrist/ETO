@@ -30,7 +30,7 @@ class FastChatAgent(LMAgent):
         super().__init__(config)
         self.controller_address = config["controller_address"]
         self.model_name = config["model_name"]
-        self.temperature = config.get("temperature", 0)
+        self.temperature = config.get("temperature", 0) # huan
         self.max_new_tokens = config.get("max_new_tokens", 512)
         self.top_p = config.get("top_p", 0)
 

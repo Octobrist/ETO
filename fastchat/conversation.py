@@ -31,7 +31,7 @@ class SeparatorStyle(IntEnum):
     CHATGLM3 = auto()
     DEEPSEEK_CHAT = auto()
     METAMATH = auto()
-
+    PHI3 = auto()
 
 @dataclasses.dataclass
 class Conversation:
@@ -166,6 +166,14 @@ class Conversation:
                 else:
                     ret += role + "\n"
             return ret
+        elif self.sep_style == SeparatorStyle.PHI3:
+            ret = ""
+            for role, message in self.messages:
+                if message:
+                    ret += role + "\n" + message + self.sep + "\n"
+                else:
+                    ret += role + "\n"
+            return ret + self.stop_str
         elif self.sep_style == SeparatorStyle.CHATGLM3:
             ret = ""
             if self.system_message:
@@ -371,6 +379,17 @@ Remember to tailor the activities to the birthday child's interests and preferen
         sep_style=SeparatorStyle.ADD_COLON_SINGLE,
         sep="\n### ",
         stop_str="###",
+    )
+)
+
+register_conv_template(
+    Conversation(
+    name="phi-3",
+    system_template="<|system|>\n{system_message}",
+    roles=("<|user|>", "<|assistant|>"),
+    sep_style=SeparatorStyle.PHI3,
+    sep="<|end|>",
+    stop_str="<|endoftext|>",
     )
 )
 

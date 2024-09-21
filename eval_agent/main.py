@@ -26,9 +26,7 @@ def interactive_loop(
     env: envs.BaseEnv = getattr(envs, env_config["env_class"])(task, **env_config)
     # reset the environment and set the prompt
     observation, state = env.reset()
-
     init_msg = observation
-
     logger.info(f"\n{Fore.YELLOW}{init_msg}{Fore.RESET}")
 
     cur_step = 1
@@ -82,10 +80,11 @@ def main(args: argparse.Namespace):
     if args.model_name is not None:
         agent_config['config']['model_name'] = args.model_name
 
-    output_path = os.path.join("outputs", agent_config['config']['model_name'].replace('/', '_'), args.exp_config+args.exp_name)
+    output_path = os.path.join("outputs", agent_config['config']['model_name'].replace('/', '_'), args.exp_config + args.exp_name)
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
-
     file_handler = logging.FileHandler(os.path.join(output_path, "log.txt"), mode='w')
+
+
     logging.basicConfig(
         format="%(message)s",
         handlers=[logging.StreamHandler(), file_handler],
@@ -150,7 +149,6 @@ def main(args: argparse.Namespace):
             state = interactive_loop(
                 task, agent, env_config
             )
-
             state_list.append(state)
             json.dump(state.to_dict(), open(os.path.join(output_path, f"{task.task_id}.json"), 'w'), indent=4)
 

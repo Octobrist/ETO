@@ -15,6 +15,7 @@
 #    limitations under the License.
 from dataclasses import dataclass, field
 import json
+import re
 import math
 import pathlib
 from typing import Dict, Optional, Sequence
@@ -26,7 +27,7 @@ import transformers
 from transformers import Trainer
 from transformers.trainer_pt_utils import LabelSmoother
 
-from fastchat.conversation import SeparatorStyle
+from fastchat.conversation import SeparatorStyle, get_conv_template
 from fastchat.model.model_adapter import get_conversation_template, get_model_adapter
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
@@ -87,14 +88,47 @@ def trainer_save_model_safe(trainer: transformers.Trainer):
     ):
         trainer.save_model()
 
+def get_phi3_turns(text):
+    positions = []
+    for match in re.finditer(r'<\|end\|>\n', text):
+        positions.append(match.start())
+    assert len(positions) % 2 == 0
+    turns = []
+    cur_ind = 0
+    for i in range(len(positions)):
+        if i % 2 == 1:
+            turns.append(text[cur_ind:positions[i]])
+            cur_ind = positions[i] + 8
+    return turns
 
 def preprocess(
     sources,
     tokenizer: transformers.PreTrainedTokenizer,
     model_path: str,
 ) -> Dict:
-    conv = get_model_adapter(model_path).get_default_conv_template(model_path)
+
+    if 'phi-3' in model_path.lower():
+        conv = get_conv_template("phi-3")
+    else:
+        conv = get_model_adapter(model_path).get_default_conv_template(model_path)
     roles = {"human": conv.roles[0], "gpt": conv.roles[1]}
+
+    # new_conversations = []
+    # for i, source in enumerate(sources):
+    #     tmp_list = []
+    #     if roles[source[0]["from"]] != conv.roles[0]:
+    #         # Skip the first one if it is not from human
+    #         source = source[1:]
+    #     for j, sentence in enumerate(source):
+    #         role = sentence['from']
+    #         if role == 'human':
+    #             role = 'user'
+    #         if role == 'gpt':
+    #             role = 'assistant'
+    #         tmp_list.append({
+    #                 "role": role, "content": sentence['value']
+    #         })
+    #     new_conversations.append(tmp_list)
 
     # Apply prompt templates
     conversations = []
@@ -102,14 +136,13 @@ def preprocess(
         if roles[source[0]["from"]] != conv.roles[0]:
             # Skip the first one if it is not from human
             source = source[1:]
-
         conv.messages = []
         for j, sentence in enumerate(source):
             role = roles[sentence["from"]]
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
         conversations.append(conv.get_prompt())
-
+    conversations = conversations[:10]
     # Tokenize conversations
     input_ids = tokenizer(
         conversations,
@@ -124,53 +157,53 @@ def preprocess(
         sep = conv.sep + conv.roles[1] + ": "
     elif conv.sep_style == SeparatorStyle.LLAMA2:
         sep = conv.sep + conv.roles[1] + " "
+    elif conv.sep_style == SeparatorStyle.PHI3:
+        sep = conv.roles[1] + "\n"
     else:
         raise NotImplementedError
 
     # Mask targets. Only compute loss on the assistant outputs.
     for conversation, target in zip(conversations, targets):
         total_len = int(target.ne(tokenizer.pad_token_id).sum())
-
-        turns = conversation.split(conv.sep2)
+        if conv.sep_style == SeparatorStyle.PHI3:
+            turns = get_phi3_turns(conversation)
+        else:
+            turns = conversation.split(conv.sep2)
         cur_len = 1
         target[:cur_len] = IGNORE_TOKEN_ID
         for i, turn in enumerate(turns):
             if turn == "":
                 break
-
             # remove <s>
             turn_len = len(tokenizer(turn).input_ids) - 1
-
             parts = turn.split(sep)
-
             if len(parts) != 2:
                 break
             parts[0] += sep
-            
             # remove <s> and the "_" in the end
             instruction_len = len(tokenizer(parts[0]).input_ids) - 2
-
+            if conv.sep_style == SeparatorStyle.PHI3:
+                instruction_len += 1
             # magic number for vicuna, since different subtoken for "USER"
             if i != 0 and conv.roles[0] == 'USER':
                 # The legacy and non-legacy modes handle special tokens differently
                 instruction_len -= 1
 
             # Ignore the user instructions
-            target[cur_len : cur_len + instruction_len] = IGNORE_TOKEN_ID
+            target[cur_len: cur_len + instruction_len] = IGNORE_TOKEN_ID
 
             # add the length of turn sep
             if conv.sep2 == '</s>':
                 cur_len += turn_len + 1 
             elif conv.sep2 == ' </s><s>':
                 cur_len += turn_len + 3
+            elif conv.sep_style == SeparatorStyle.PHI3:
+                cur_len += turn_len + 1
             else:
                 raise NotImplementedError
-            
-            # magic number for vicuna, since different subtoken for "USER"
-            if i != 0 and conv.roles[0] == 'USER':
-                # The legacy and non-legacy modes handle special tokens differently
-                cur_len -= 1
 
+        if conv.sep_style == SeparatorStyle.PHI3:
+            cur_len += 1
         target[cur_len:] = IGNORE_TOKEN_ID
 
         if False:  # Inspect and check the correctness of masking
@@ -285,7 +318,7 @@ def train():
     config = transformers.AutoConfig.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
-        trust_remote_code=model_args.trust_remote_code,
+        trust_remote_code=True,
     )
     orig_ctx_len = getattr(config, "max_position_embeddings", None)
     if orig_ctx_len and training_args.model_max_length > orig_ctx_len:
@@ -294,20 +327,20 @@ def train():
     config.use_cache = False
 
     # Load model and tokenizer
-    model = transformers.AutoModelForCausalLM.from_pretrained(
-        model_args.model_name_or_path,
-        config=config,
-        cache_dir=training_args.cache_dir,
-        trust_remote_code=model_args.trust_remote_code,
-        attn_implementation="flash_attention_2",
-    )
+    # model = transformers.AutoModelForCausalLM.from_pretrained(
+    #     model_args.model_name_or_path,
+    #     config=config,
+    #     cache_dir=training_args.cache_dir,
+    #     trust_remote_code=model_args.trust_remote_code,
+    #     attn_implementation="flash_attention_2",
+    # )
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
         model_max_length=training_args.model_max_length,
         padding_side=model_args.padding_side,
         use_fast=False,
-        trust_remote_code=model_args.trust_remote_code,
+        trust_remote_code=True,
     )
 
     if tokenizer.pad_token != tokenizer.unk_token:
