@@ -18,6 +18,8 @@ import json
 import re
 import math
 import pathlib
+import sys
+sys.path.append('/home/works/ETO/')
 from typing import Dict, Optional, Sequence
 
 import numpy as np
@@ -142,7 +144,7 @@ def preprocess(
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
         conversations.append(conv.get_prompt())
-    conversations = conversations[:10]
+
     # Tokenize conversations
     input_ids = tokenizer(
         conversations,
@@ -327,13 +329,13 @@ def train():
     config.use_cache = False
 
     # Load model and tokenizer
-    # model = transformers.AutoModelForCausalLM.from_pretrained(
-    #     model_args.model_name_or_path,
-    #     config=config,
-    #     cache_dir=training_args.cache_dir,
-    #     trust_remote_code=model_args.trust_remote_code,
-    #     attn_implementation="flash_attention_2",
-    # )
+    model = transformers.AutoModelForCausalLM.from_pretrained(
+        model_args.model_name_or_path,
+        config=config,
+        cache_dir=training_args.cache_dir,
+        trust_remote_code=True,
+        attn_implementation="flash_attention_2",
+    )
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,

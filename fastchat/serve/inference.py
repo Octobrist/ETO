@@ -85,7 +85,7 @@ def generate_stream(
     stop_token_ids = params.get("stop_token_ids", None) or []
     if tokenizer.eos_token_id not in stop_token_ids:
         stop_token_ids.append(tokenizer.eos_token_id)
-
+    # huan
     logits_processor = prepare_logits_processor(
         temperature, repetition_penalty, top_p, top_k
     )

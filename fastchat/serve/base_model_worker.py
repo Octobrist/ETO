@@ -88,6 +88,7 @@ class BaseModelWorker:
         logger.info("Register to controller")
 
         url = self.controller_addr + "/register_worker"
+        print(url)
         data = {
             "worker_name": self.worker_addr,
             "check_heart_beat": True,

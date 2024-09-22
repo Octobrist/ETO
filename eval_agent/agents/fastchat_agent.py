@@ -5,6 +5,7 @@ from typing import List, Dict, Union, Any
 import requests
 from fastchat.model.model_adapter import get_conversation_template
 from requests.exceptions import Timeout, ConnectionError
+from fastchat.conversation import SeparatorStyle
 
 from .base import LMAgent
 
@@ -58,6 +59,8 @@ class FastChatAgent(LMAgent):
                 raise ValueError(f"Unknown role: {role}")
         conv.append_message(conv.roles[1], None)
         prompt = conv.get_prompt()
+        if conv.sep_style == SeparatorStyle.PHI3:
+            prompt = prompt.replace(conv.stop_str, '')
         new_stop = set()
         _add_to_set(self.stop_words, new_stop)
         _add_to_set(conv.stop_str, new_stop)
