@@ -19,6 +19,8 @@ import re
 import math
 import pathlib
 import sys
+import os
+os.environ["WANDB_DISABLED"]="true"
 sys.path.append('/home/works/ETO/')
 from typing import Dict, Optional, Sequence
 
@@ -345,6 +347,7 @@ def train():
         trust_remote_code=True,
     )
 
+
     if tokenizer.pad_token != tokenizer.unk_token:
         tokenizer.pad_token = tokenizer.unk_token
 
@@ -355,19 +358,18 @@ def train():
     trainer = Trainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module
     )
+
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
         trainer.train(resume_from_checkpoint=True)
     else:
         trainer.train()
 
-    # Save model
+    # # Save model
     model.config.use_cache = True
     trainer.save_state()
-    if trainer.is_deepspeed_enabled:
-        trainer.save_model()
-    else:
-        trainer_save_model_safe(trainer)
-
+    trainer.save_model()
+    torch.save(model.lm_head.state_dict(), f'{training_args.output_dir}/lm_head.pt')
+    torch.save(model.base_model.norm.state_dict(), f'{training_args.output_dir}/norm.pt')
 
 if __name__ == "__main__":
     train()

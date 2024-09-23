@@ -82,12 +82,21 @@ class BaseModelAdapter:
                 model_path, use_fast=False, revision=revision, trust_remote_code=True
             )
         try:
-            model = AutoModelForCausalLM.from_pretrained(
-                model_path,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True,
-                **from_pretrained_kwargs,
-            )
+            if 'sft' in model_path.lower():
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                    **from_pretrained_kwargs,
+                    device_map='cuda' # huan: for sft phi-3
+                )
+            else:
+                model = AutoModelForCausalLM.from_pretrained(
+                    model_path,
+                    low_cpu_mem_usage=True,
+                    trust_remote_code=True,
+                    **from_pretrained_kwargs,
+                )
         except NameError:
             model = AutoModel.from_pretrained(
                 model_path,

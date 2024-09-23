@@ -72,7 +72,6 @@ class ModelWorker(BaseModelWorker):
             limit_worker_concurrency,
             conv_template=conv_template,
         )
-
         logger.info(f"Loading the model {self.model_names} on worker {worker_id} ...")
         self.model, self.tokenizer = load_model(
             model_path,
@@ -88,6 +87,11 @@ class ModelWorker(BaseModelWorker):
             xft_config=xft_config,
             debug=debug,
         )
+        if 'phi-3' in model_path and 'sft' in model_path:
+            assert device == 'cuda'
+            self.model.lm_head.load_state_dict(torch.load(f'{model_path}/lm_head.pt'))
+            self.model.base_model.norm.load_state_dict(torch.load(f'{model_path}/norm.pt'))
+
         self.device = device
         if self.tokenizer.pad_token == None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
