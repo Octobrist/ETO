@@ -46,6 +46,7 @@ class FastChatAgent(LMAgent):
             "max_new_tokens": self.max_new_tokens,
             "echo": False,
             "top_p": self.top_p,
+            "logprobs": True,
         }
         conv = get_conversation_template(self.model_name)
         for history_item in messages:

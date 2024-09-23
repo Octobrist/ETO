@@ -87,7 +87,7 @@ class ModelWorker(BaseModelWorker):
             xft_config=xft_config,
             debug=debug,
         )
-        if 'phi-3' in model_path and 'sft' in model_path:
+        if 'phi-3' in model_path.lower() and 'sft' in model_path.lower():
             assert device == 'cuda'
             self.model.lm_head.load_state_dict(torch.load(f'{model_path}/lm_head.pt'))
             self.model.base_model.norm.load_state_dict(torch.load(f'{model_path}/norm.pt'))
