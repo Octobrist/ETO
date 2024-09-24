@@ -3,6 +3,7 @@ import json
 import logging
 import pathlib
 import argparse
+import pickle
 from typing import List, Dict, Any
 from tqdm import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
@@ -30,12 +31,14 @@ def interactive_loop(
     logger.info(f"\n{Fore.YELLOW}{init_msg}{Fore.RESET}")
 
     cur_step = 1
+    logprobs = []
     while not state.finished:
         logger.info(f"\n{Fore.RED}Step {cur_step}{Fore.RESET}\n")
         cur_step += 1
         # agent act
         try:
-            llm_output: str = agent(state.history)
+            llm_output, llm_logprobs = agent(state.history)
+            logprobs.append({'output':llm_output, 'logprobs':llm_logprobs})
             # color the action in green
             # logger.info(f"\nLM Agent Action:\n\033[92m{action.value}\033[0m")
             logger.info(
@@ -68,7 +71,7 @@ def interactive_loop(
             f"Task finished in {state.steps} steps. Success: {state.success}"
         )
 
-    return state
+    return state, logprobs
 
 
 def main(args: argparse.Namespace):
@@ -119,7 +122,7 @@ def main(args: argparse.Namespace):
     done_task_id = []
     if os.path.exists(output_path) and not args.override:
         for file in os.listdir(output_path):
-            if not file.endswith('json'):
+            if not file.endswith('json') or 'logprob' in file:
                 continue
             state = State.load_json(json.load(open(os.path.join(output_path, file))))
             state_list.append(state)
@@ -146,11 +149,14 @@ def main(args: argparse.Namespace):
             if task.task_id in done_task_id or str(task.task_id) in done_task_id:
                 continue
 
-            state = interactive_loop(
+            state, logprobs = interactive_loop(
                 task, agent, env_config
             )
             state_list.append(state)
             json.dump(state.to_dict(), open(os.path.join(output_path, f"{task.task_id}.json"), 'w'), indent=4)
+
+            with open(os.path.join(output_path, f"{task.task_id}_logprob.pkl"), 'wb') as file:
+                pickle.dump(logprobs, file)
 
             pbar.update(1)
         pbar.close()

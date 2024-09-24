@@ -91,6 +91,7 @@ class ModelWorker(BaseModelWorker):
             assert device == 'cuda'
             self.model.lm_head.load_state_dict(torch.load(f'{model_path}/lm_head.pt'))
             self.model.base_model.norm.load_state_dict(torch.load(f'{model_path}/norm.pt'))
+            print('Successful load lm_head and norm.')
 
         self.device = device
         if self.tokenizer.pad_token == None:

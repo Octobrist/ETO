@@ -28,3 +28,4 @@ opencv-python
 textworld[pddl]>=1.6.1
 alfworld
 gdown
+

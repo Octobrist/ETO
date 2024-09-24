@@ -35,7 +35,7 @@ class FastChatAgent(LMAgent):
         self.max_new_tokens = config.get("max_new_tokens", 512)
         self.top_p = config.get("top_p", 0)
 
-    def __call__(self, messages: List[dict]) -> str:
+    def __call__(self, messages: List[dict]):
         controller_addr = self.controller_address
         worker_addr = controller_addr
         if worker_addr == "":
@@ -75,6 +75,7 @@ class FastChatAgent(LMAgent):
         headers = {"User-Agent": "FastChat Client"}
         for _ in range(3):
             try:
+                llm_logprobs = []
                 response = requests.post(
                     controller_addr + "/worker_generate_stream",
                     headers=headers,
@@ -83,13 +84,18 @@ class FastChatAgent(LMAgent):
                     timeout=120,
                 )
                 text = ""
+                data_logprobs = {'token':'', 'logprob':None}
                 for line in response.iter_lines(decode_unicode=False, delimiter=b"\0"):
                     if line:
                         data = json.loads(line)
                         if data["error_code"] != 0:
                             assert False, data["text"]
-                        text = data["text"]
-                return text
+                        text = data['text']
+                        data_logprobs = data["logprobs"]
+                for i in range(len(data_logprobs['tokens'])):
+                    llm_logprobs.append({'token':data_logprobs['tokens'][i], 'logprob':data_logprobs['token_logprobs'][i]})
+                llm_logprobs.append({'token'})
+                return text, llm_logprobs
             # if timeout or connection error, retry
             except Timeout:
                 print("Timeout, retrying...")

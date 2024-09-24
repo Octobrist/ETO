@@ -15,8 +15,7 @@ class OpenAILMAgent(LMAgent):
         if "api_key" in config:
             openai.api_key = config['api_key']
 
-        # openai.api_key = 'sk-UTsTKP7fGYJI2HT22e4899C0A92a4b01Bd182a9021F7C5B3' # gpt3.5
-        openai.api_key = 'sk-wWuauIF02aZbs8tnFaF448D518Ac43149d09287147534e6a' # gpt4
+        openai.api_key = 'sk-l8X7qhzVtthP3Hvd06F3Fb532dF044C09f351545C640F16f'
         openai.api_base = "https://api.huiyan-ai.cn/v1"
     @backoff.on_exception(
         backoff.fibo,
@@ -29,7 +28,7 @@ class OpenAILMAgent(LMAgent):
             openai.error.APIConnectionError,
         ),
     )
-    def __call__(self, messages) -> str:
+    def __call__(self, messages):
         # Prepend the prompt with the system message
         response = openai.ChatCompletion.create(
             model=self.config["model_name"],
@@ -37,5 +36,10 @@ class OpenAILMAgent(LMAgent):
             max_tokens=self.config.get("max_tokens", 512),
             temperature=self.config.get("temperature", 0),
             stop=self.stop_words,
+            logprobs=True,
         )
-        return response.choices[0].message["content"]
+        llm_logprobs = []
+        token_probs = response.choices[0]["logprobs"]["content"]
+        for item in token_probs:
+            llm_logprobs.append({'token':item['token'], 'logprob':item['logprob']})
+        return response.choices[0].message["content"], llm_logprobs
