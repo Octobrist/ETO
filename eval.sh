@@ -1,5 +1,5 @@
 #!/bin/bash
-model_list=("exp_traj-Phi-3-mini-4k-instruct-webshop-sft" "Mistral-7B-Instruct-v0.2" "llama3-8b" "Phi-3-mini-4k-instruct" "gpt-3.5-turbo" "gpt-4")
+model_list=("gpt-3.5-turbo" "gpt-4")
 
 for item in "${model_list[@]}"; do
     if [[ $item == *gpt* ]]; then

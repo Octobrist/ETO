@@ -37,8 +37,8 @@ def interactive_loop(
         cur_step += 1
         # agent act
         try:
-            llm_output, llm_logprobs = agent(state.history)
-            logprobs.append({'output':llm_output, 'logprobs':llm_logprobs})
+            llm_output = agent(state.history)
+            # logprobs.append({'output':llm_output, 'logprobs':llm_logprobs})
             # color the action in green
             # logger.info(f"\nLM Agent Action:\n\033[92m{action.value}\033[0m")
             logger.info(
@@ -155,8 +155,8 @@ def main(args: argparse.Namespace):
             state_list.append(state)
             json.dump(state.to_dict(), open(os.path.join(output_path, f"{task.task_id}.json"), 'w'), indent=4)
 
-            with open(os.path.join(output_path, f"{task.task_id}_logprob.pkl"), 'wb') as file:
-                pickle.dump(logprobs, file)
+            # with open(os.path.join(output_path, f"{task.task_id}_logprob.pkl"), 'wb') as file:
+            #     pickle.dump(logprobs, file)
 
             pbar.update(1)
         pbar.close()
