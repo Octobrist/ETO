@@ -31,7 +31,6 @@ def interactive_loop(
     logger.info(f"\n{Fore.YELLOW}{init_msg}{Fore.RESET}")
 
     cur_step = 1
-    logprobs = []
     while not state.finished:
         logger.info(f"\n{Fore.RED}Step {cur_step}{Fore.RESET}\n")
         cur_step += 1
@@ -44,6 +43,7 @@ def interactive_loop(
             logger.info(
                 f"\n{Fore.GREEN}{llm_output}{Fore.RESET}\n"
             )
+
         except Exception as e:
             logger.info(f"Agent failed with error: {e}")
             state.success = False
@@ -71,7 +71,7 @@ def interactive_loop(
             f"Task finished in {state.steps} steps. Success: {state.success}"
         )
 
-    return state, logprobs
+    return state
 
 
 def main(args: argparse.Namespace):
@@ -82,6 +82,7 @@ def main(args: argparse.Namespace):
     
     if args.model_name is not None:
         agent_config['config']['model_name'] = args.model_name
+        agent_config['config']['critic_model_name'] = args.critic_model_name
 
     output_path = os.path.join("outputs", agent_config['config']['model_name'].replace('/', '_'), args.exp_config + args.exp_name)
     pathlib.Path(output_path).mkdir(parents=True, exist_ok=True)
@@ -94,7 +95,7 @@ def main(args: argparse.Namespace):
     )
 
     env_config = exp_config["env_config"]
-    
+
     logger.info(f"Experiment config: \n{json.dumps(exp_config, indent=2)}")
 
     if env_config['env_class'] == 'WebShopEnv':
@@ -149,11 +150,12 @@ def main(args: argparse.Namespace):
             if task.task_id in done_task_id or str(task.task_id) in done_task_id:
                 continue
 
-            state, logprobs = interactive_loop(
+            state = interactive_loop(
                 task, agent, env_config
             )
             state_list.append(state)
             json.dump(state.to_dict(), open(os.path.join(output_path, f"{task.task_id}.json"), 'w'), indent=4)
+
 
             # with open(os.path.join(output_path, f"{task.task_id}_logprob.pkl"), 'wb') as file:
             #     pickle.dump(logprobs, file)
@@ -229,6 +231,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model_name",
+        type=str,
+        required=False,
+        help="Model name. It will override the 'model_name' in agent_config"
+    )
+    parser.add_argument(
+        "--critic_model_name",
         type=str,
         required=False,
         help="Model name. It will override the 'model_name' in agent_config"

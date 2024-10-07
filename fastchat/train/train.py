@@ -20,12 +20,20 @@ import math
 import pathlib
 import sys
 import os
-os.environ["WANDB_DISABLED"]="true"
+
+import wandb
+from torch.nn.modules.module import T
+
+os.environ["WANDB_MODE"] = "offline"
 sys.path.append('/home/works/ETO/')
 from typing import Dict, Optional, Sequence
 
 import numpy as np
+import torch.nn.functional as F
 import torch
+import torch.nn as nn
+from torch.nn import CrossEntropyLoss
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 from torch.utils.data import Dataset
 import transformers
 from transformers import Trainer
@@ -35,6 +43,60 @@ from fastchat.conversation import SeparatorStyle, get_conv_template
 from fastchat.model.model_adapter import get_conversation_template, get_model_adapter
 
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
+
+class CustomTrainer(Trainer):
+    def compute_loss(self, model, inputs, return_outputs=False):
+        """
+        How the loss is computed by Trainer. By default, all models return the loss in the first element.
+
+        Subclass and override for custom behavior.
+        """
+        labels = inputs.pop("labels")
+        padding_mask = labels.eq(-100)
+        pred_length = torch.sum(~padding_mask[:, 1:]) * 1.0
+        outputs = model(**inputs)
+
+        gamma = getattr(self.args,'gamma',0.95)
+        reg_weight = getattr(self.args,'reg_weight',0.1)
+
+        assert reg_weight > 0
+        # batch, seq_len, vocab_size
+        pi = F.softmax(outputs.logits, dim=-1)
+        # batch, seq_len-1
+        action_prob = torch.stack([
+            pi[:, i, inputs.input_ids[:, i+1]][0]
+            for i in range(inputs.input_ids.shape[-1]-1)
+        ], dim=-1)
+
+        mle_loss = - torch.sum(torch.log(action_prob) * (~padding_mask[:, 1:]).float()) / pred_length
+        # batch, seq_len
+        values = torch.logsumexp(outputs.logits, dim=-1) / reg_weight
+        # # batch, seq_len-1
+        # values = torch.logsumexp(
+        #     torch.stack([
+        #         outputs.logits[:, i, inputs.input_ids[:, i+1]][0]
+        #         for i in range(inputs.input_ids.shape[-1]-1)
+        #     ], dim=-1), dim=-1) / reg_weight
+        # batch, seq_len-1
+        expect_next_values = torch.mul(action_prob, gamma * values[:, 1:])
+        reg_loss = reg_weight * (values[:, :-1] + torch.log(action_prob) - expect_next_values)**2
+        reg_loss = torch.sum(reg_loss * (~padding_mask[:,1:]).float()) / pred_length
+        loss = mle_loss + reg_loss
+        if self.state.global_step % 5 == 0: # todo change
+            wandb.log({"mle_loss":mle_loss.__float__(), "reg_loss": reg_loss.__float__(), "total_loss": loss.__float__(),
+                       "lr": self.optimizer.state_dict()['param_groups'][0]['lr'], 'epoch': self.state.epoch})
+        return (loss, outputs) if return_outputs else loss
+
+class SoftmaxLinear(nn.Module):
+    def __init__(self, linear_layer):
+        super(SoftmaxLinear, self).__init__()
+        self.linear_layer = linear_layer
+
+    def forward(self, x):
+        logits = self.linear_layer(x)
+        softmax_layer = nn.Softmax(dim=-1)
+        prob = softmax_layer(logits)
+        return prob
 
 
 @dataclass
@@ -64,6 +126,9 @@ class DataArguments:
 
 @dataclass
 class TrainingArguments(transformers.TrainingArguments):
+    reg_weight: float = field(
+        default=0.1,
+    )
     cache_dir: Optional[str] = field(default=None)
     optim: str = field(default="adamw_torch")
     model_max_length: int = field(
@@ -146,6 +211,8 @@ def preprocess(
             assert role == conv.roles[j % 2], f"{i}"
             conv.append_message(role, sentence["value"])
         conversations.append(conv.get_prompt())
+
+    # conversations = conversations[:10]
 
     # Tokenize conversations
     input_ids = tokenizer(
@@ -315,7 +382,19 @@ def train():
     parser = transformers.HfArgumentParser(
         (ModelArguments, DataArguments, TrainingArguments)
     )
+
     model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+    wandb_config = {}
+    for attr, value in model_args.__dict__.items():
+        if not attr.startswith('__'):
+            wandb_config[attr] = value
+    for attr, value in training_args.__dict__.items():
+        if not attr.startswith('__'):
+            wandb_config[attr] = value
+    wandb.init(project='inverse Q',
+               name='webshop',
+               config=wandb_config,
+               resume='None')
     local_rank = training_args.local_rank
 
     # Set RoPE scaling factor
@@ -337,7 +416,18 @@ def train():
         cache_dir=training_args.cache_dir,
         trust_remote_code=True,
         attn_implementation="flash_attention_2",
+
     )
+
+    if 'phi-3' in model_args.model_name_or_path.lower():
+        if 'sft' in model_args.model_name_or_path.lower():
+            model.lm_head.load_state_dict(torch.load(f'{model_args.model_name_or_path}/lm_head.pt'))
+            model.base_model.norm.load_state_dict(torch.load(f'{model_args.model_name_or_path}/norm.pt'))
+            print('Successful load lm_head and norm.')
+        # else:
+        #     model.lm_head = SoftmaxLinear(linear_layer=model.lm_head)
+        #     print('Successful replace lm_head with softmax.')
+
     tokenizer = transformers.AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         cache_dir=training_args.cache_dir,
@@ -347,7 +437,6 @@ def train():
         trust_remote_code=True,
     )
 
-
     if tokenizer.pad_token != tokenizer.unk_token:
         tokenizer.pad_token = tokenizer.unk_token
 
@@ -355,9 +444,13 @@ def train():
     data_module = make_supervised_data_module(tokenizer=tokenizer, data_args=data_args, model_path=model_args.model_name_or_path)
 
     # Start trainner
-    trainer = Trainer(
+    trainer = CustomTrainer(
         model=model, tokenizer=tokenizer, args=training_args, **data_module
     )
+
+    # trainer = Trainer(
+    #     model=model, tokenizer=tokenizer, args=training_args, **data_module
+    # )
 
     if list(pathlib.Path(training_args.output_dir).glob("checkpoint-*")):
         trainer.train(resume_from_checkpoint=True)

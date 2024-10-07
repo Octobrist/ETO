@@ -1974,6 +1974,15 @@ class PhiAdapter(BaseModelAdapter):
     def get_default_conv_template(self, model_path: str) -> Conversation:
         return get_conv_template("phi-3")
 
+class LLAMA3Adapter(BaseModelAdapter):
+    """The model adapter for Yi models"""
+
+    def match(self, model_path: str):
+        return "llama-3" in model_path.lower()
+
+    def get_default_conv_template(self, model_path: str) -> Conversation:
+        return get_conv_template("llama-3")
+
 class DeepseekCoderAdapter(BaseModelAdapter):
     """The model adapter for deepseek-ai's coder models"""
 
@@ -2094,6 +2103,7 @@ register_model_adapter(DeepseekChatAdapter)
 register_model_adapter(MetaMathAdapter)
 register_model_adapter(SolarAdapter)
 register_model_adapter(PhiAdapter)
+register_model_adapter(LLAMA3Adapter)
 
 # After all adapters, try the default base adapter.
 register_model_adapter(BaseModelAdapter)

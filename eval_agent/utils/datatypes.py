@@ -58,6 +58,17 @@ class State:
         elif format == 'fastchat':
             history = []
             for idx, conv in enumerate(self.history):
+                # if conv['role'] == 'user':
+                #     history.append({
+                #         "from": "human",
+                #         "value": conv['content'].strip(),
+                #     })
+                # elif conv['role'] == 'assistant':
+                #     history.append({
+                #         "from": "gpt",
+                #         "value": conv['content'].strip(),
+                #     })
+
                 if idx % 2 == 0:
                     assert conv['role'] == 'user'
                     history.append({

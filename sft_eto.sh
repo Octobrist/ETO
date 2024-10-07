@@ -1,4 +1,4 @@
-model_name=Phi-3-mini-4k-instruct
+model_name=exp_traj-Phi-3-mini-4k-instruct-webshop-sft
 task=$1
 
 exp_name=$2
@@ -15,7 +15,8 @@ batch_size=64
 micro_batch_size=2
 accumulation_step=$((${batch_size}/${node_num}/${micro_batch_size}))
 
-sft_model_name=${exp_name}-${model_name}-${task}-sft
+#sft_model_name=${exp_name}-${model_name}-${task}-sft
+sft_model_name=${exp_name}-${model_name}
 
 python -m torch.distributed.run --nproc_per_node=${node_num} --master_port=20001 fastchat/train/train.py \
     --model_name_or_path ${model_path}${model_name} \
@@ -32,7 +33,7 @@ python -m torch.distributed.run --nproc_per_node=${node_num} --master_port=20001
     --learning_rate 2e-5 \
     --weight_decay 0. \
     --warmup_ratio 0.03 \
-    --lr_scheduler_type "cosine" \
+    --lr_scheduler_type "constant_with_warmup" \
     --logging_steps 5 \
     --fsdp "full_shard auto_wrap" \
     --fsdp_transformer_layer_cls_to_wrap 'Phi3DecoderLayer' \

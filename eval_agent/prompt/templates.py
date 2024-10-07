@@ -2,7 +2,6 @@ import os
 import json
 
 
-
 PROMPT_WITH_ICL_TEMPLATE = """{instruction}
 ---
 {icl_prompt}

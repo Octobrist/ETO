@@ -33,12 +33,13 @@ class FastChatAgent(LMAgent):
         super().__init__(config)
         self.controller_address = config["controller_address"]
         self.model_name = config["model_name"]
+        self.critic_model_name = config["critic_model_name"]
         self.temperature = config.get("temperature", 0) # huan
         self.max_new_tokens = config.get("max_new_tokens", 512)
         self.top_p = config.get("top_p", 0)
 
-    def get_conv_and_prompt(self, messages):
-        conv = get_conversation_template(self.model_name)
+    def get_conv_and_prompt(self, messages, model_name):
+        conv = get_conversation_template(model_name)
         for history_item in messages:
             role = history_item["role"]
             content = history_item["content"]
@@ -102,31 +103,52 @@ class FastChatAgent(LMAgent):
             # "top_p": self.top_p,
             # "logprobs": True,
         }
-        critic_message = copy.deepcopy(messages[10:])
-        critic_message[0]['content'] = get_critic_prompt() + critic_message[0]['content']
-        critic_conv, critic_prompt = self.get_conv_and_prompt(critic_message)
-        new_stop = set()
-        _add_to_set(self.stop_words, new_stop)
-        _add_to_set(critic_conv.stop_str, new_stop)
-        gen_params.update(
-            {
-                "prompt": critic_prompt,
-                "stop": list(new_stop),
-                "stop_token_ids": critic_conv.stop_token_ids,
-            }
-        )
-        # critic_text = 'Next step plan: start'
-        critic_text = self.send_agent_request(controller_addr, gen_params)
-        next_plan = critic_text.replace('Next step plan: ', '')
-        messages.append({
-            'role': 'assistant',
-            'content': f"Thought: {next_plan}"
-        })
-        conv, prompt = self.get_conv_and_prompt(messages)
+        conv, prompt = self.get_conv_and_prompt(messages, self.model_name)
+        stop_words = set()
+        _add_to_set(self.stop_words, stop_words)
+        _add_to_set(conv.stop_str, stop_words)
+        # 1. generate ori thought
         gen_params.update(
             {
                 "prompt": prompt,
-                "stop": list(new_stop),
+                "stop": list(stop_words),
+                "stop_token_ids": conv.stop_token_ids,
+            }
+        )
+        ori_text = self.send_agent_request(controller_addr, gen_params)
+        # 2. generate refined thought
+        messages.append({
+            'role': 'assistant',
+            'content': f"{ori_text}"
+        })
+        critic_message = copy.deepcopy(messages[10:])
+        critic_message[0]['content'] = get_critic_prompt() + critic_message[0]['content']
+        critic_conv, critic_prompt = self.get_conv_and_prompt(critic_message, self.critic_model_name)
+        stop_words = set()
+        _add_to_set(self.stop_words, stop_words)
+        _add_to_set('<|end|>', stop_words)
+        _add_to_set(critic_conv.stop_str, stop_words)
+        gen_params.update(
+            {
+                "prompt": critic_prompt,
+                "stop": list(stop_words),
+                "stop_token_ids": critic_conv.stop_token_ids,
+            }
+        )
+        critic_text = self.send_agent_request(controller_addr, gen_params)
+        messages.append({
+            'role': 'assistant',
+            'content': f"{critic_text}"
+        })
+        conv, prompt = self.get_conv_and_prompt(messages, self.model_name)
+        # prompt = prompt.rsplit('<|eot_id|><|start_header_id|>assistant<|end_header_id|>', 1)[0]
+        stop_words = set()
+        _add_to_set(self.stop_words, stop_words)
+        _add_to_set(conv.stop_str, stop_words)
+        gen_params.update(
+            {
+                "prompt": prompt,
+                "stop": list(stop_words),
                 "stop_token_ids": conv.stop_token_ids,
             }
         )
